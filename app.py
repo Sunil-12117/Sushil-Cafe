@@ -5,6 +5,7 @@ from bson import ObjectId
 from datetime import datetime
 import os
 import threading
+import certifi
 
 app = Flask(__name__)
 CORS(app)
@@ -18,9 +19,13 @@ db = None
 def connect_mongo():
     global db
     try:
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=30000)
+        client = MongoClient(
+            MONGO_URI,
+            serverSelectionTimeoutMS=30000,
+            tlsCAFile=certifi.where()   # SSL fix
+        )
         db = client['sushil_cafe']
-        db.list_collection_names()  # test
+        db.list_collection_names()
         print("✅ MongoDB connected!")
     except Exception as e:
         print(f"❌ MongoDB error: {e}")

@@ -14,21 +14,37 @@ MONGO_URI      = os.environ.get('MONGO_URI', '')
 ADMIN_USERNAME = os.environ.get('ADMIN_USERNAME', 'admin')
 ADMIN_PASSWORD = os.environ.get('ADMIN_PASSWORD', 'sushil@123')
 
+# MONGO_URI mein SSL params add karo agar nahi hain
+if MONGO_URI and 'tls=' not in MONGO_URI:
+    if '?' in MONGO_URI:
+        MONGO_URI += '&tls=true&tlsAllowInvalidCertificates=true'
+    else:
+        MONGO_URI += '?tls=true&tlsAllowInvalidCertificates=true'
+
 # MongoDB — background mein connect karo (startup block nahi karega)
 db = None
 def connect_mongo():
     global db
-    try:
-        client = MongoClient(
-            MONGO_URI,
-            serverSelectionTimeoutMS=30000,
-            tlsCAFile=certifi.where()   # SSL fix
-        )
-        db = client['sushil_cafe']
-        db.list_collection_names()
-        print("✅ MongoDB connected!")
-    except Exception as e:
-        print(f"❌ MongoDB error: {e}")
+    import time
+    for attempt in range(5):
+        try:
+            print(f"🔄 MongoDB connect attempt {attempt + 1}...")
+            client = MongoClient(
+                MONGO_URI,
+                serverSelectionTimeoutMS=15000,
+                connectTimeoutMS=15000,
+                tls=True,
+                tlsAllowInvalidCertificates=True,
+                tlsAllowInvalidHostnames=True
+            )
+            client.admin.command('ping')
+            db = client['sushil_cafe']
+            print("✅ MongoDB connected!")
+            return
+        except Exception as e:
+            print(f"❌ Attempt {attempt+1} failed: {e}")
+            time.sleep(5)
+    print("❌ All MongoDB connection attempts failed")
 
 threading.Thread(target=connect_mongo, daemon=True).start()
 
@@ -51,6 +67,22 @@ def fix_ids(docs):
 def health():
     status = 'connected' if db is not None else 'connecting...'
     return jsonify({'success': True, 'status': 'online', 'mongodb': status})
+
+# ── Debug — live connection test ──
+@app.route('/api/debug', methods=['GET'])
+def debug():
+    try:
+        test_client = MongoClient(
+            MONGO_URI,
+            serverSelectionTimeoutMS=10000,
+            tls=True,
+            tlsAllowInvalidCertificates=True,
+            tlsAllowInvalidHostnames=True
+        )
+        test_client.admin.command('ping')
+        return jsonify({'success': True, 'message': 'Direct connection OK!'})
+    except Exception as e:
+        return jsonify({'success': False, 'error': str(e)})
 
 # ── Auth ──
 @app.route('/api/login', methods=['POST'])
